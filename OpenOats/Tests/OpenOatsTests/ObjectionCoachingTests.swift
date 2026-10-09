@@ -57,6 +57,117 @@ final class ObjectionCoachingTests: XCTestCase {
         }
     }
 
+    func testCompletedClausesDoNotCarryDenialIntoTheNextChunk() {
+        for ending in [".", "!", "?", ";", "\n", " but", " however", " yet", " and"] {
+            for (category, positives, _) in examples {
+                var coaching = ObjectionCoaching()
+                coaching.consumeFinalized(Utterance(
+                    text: "No thanks" + ending, speaker: .remote(2), timestamp: epoch
+                ))
+                let current = positives[0]
+                coaching.consumeFinalized(Utterance(
+                    text: current, speaker: .remote(2), timestamp: epoch.addingTimeInterval(1)
+                ))
+                XCTAssertEqual(coaching.cards.map(\.category), [category], "\(category), \(ending)")
+                XCTAssertEqual(coaching.cards.first?.quote, current)
+            }
+        }
+        var coaching = ObjectionCoaching()
+        coaching.consumeFinalized(Utterance(text: "We have no plans.", speaker: .them, timestamp: epoch))
+        let current = "Migration would be too difficult."
+        coaching.consumeFinalized(Utterance(text: current, speaker: .them, timestamp: epoch.addingTimeInterval(1)))
+        XCTAssertEqual(coaching.cards.map(\.category), [.implementationEffort])
+        XCTAssertEqual(coaching.cards.first?.quote, current)
+    }
+
+    func testCompletedClausesCannotCompleteSplitPhrasesButUnfinishedClausesCarryDenial() {
+        for (first, second) in [
+            ("Send me.", "some information."),
+            ("We don't have;", "the budget."),
+            ("Migration would be!", "too difficult."),
+            ("It is not", "too expensive."),
+            ("No thanks", "send me some information."),
+            ("We have no plans", "migration would be too difficult.")
+        ] {
+            var coaching = ObjectionCoaching()
+            coaching.consumeFinalized(Utterance(text: first, speaker: .them, timestamp: epoch))
+            coaching.consumeFinalized(Utterance(text: second, speaker: .them, timestamp: epoch.addingTimeInterval(1)))
+            XCTAssertTrue(coaching.cards.isEmpty, first + " / " + second)
+        }
+    }
+
+    func testTemporalQualifiersPreserveNegativeObjectionsAndSuppressNeutralizedPhrases() {
+        let negativeObjections: [(ObjectionCategory, String, String)] = [
+            (.priceBudget, "We don't have the", "budget"),
+            (.priceBudget, "We cannot", "afford it"),
+            (.priceBudget, "We have no", "budget"),
+            (.priceBudget, "There is insufficient", "budget"),
+            (.timingPriority, "This is not a", "priority"),
+            (.timingPriority, "We don't have", "time"),
+            (.lackOfInterest, "I'm not", "interested"),
+            (.lackOfInterest, "We don't need", "this"),
+            (.decisionMaker, "I'm not the decision", "maker"),
+            (.decisionMaker, "I cannot approve", "this"),
+            (.implementationEffort, "We don't want to", "switch"),
+            (.implementationEffort, "We cannot handle the", "migration")
+        ]
+        let neutralizedObjections = [
+            "It isn't too expensive", "We're not too busy",
+            "We don't already have a provider", "I'm not worried about the integration",
+            "It is too expensive", "It's a bad time", "We already have a provider",
+            "Send me information", "I need to check with my boss", "Migration is too difficult",
+            "We don't have the budget issue", "I'm not interested in delaying"
+        ]
+        for qualifier in ["anymore", "any longer"] {
+            for (category, first, last) in negativeObjections {
+                let fragments = [first, last + " " + qualifier + "."]
+                let quote = fragments.joined(separator: " ")
+                for chunks in [[quote], fragments] {
+                    var coaching = ObjectionCoaching()
+                    for (index, chunk) in chunks.enumerated() {
+                        coaching.consumeFinalized(Utterance(
+                            text: chunk, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))
+                        ))
+                    }
+                    XCTAssertEqual(coaching.cards.map(\.category), [category], quote)
+                    XCTAssertEqual(coaching.cards.first?.quote, chunks.joined(separator: "\n"))
+                }
+            }
+            for phrase in neutralizedObjections {
+                var coaching = ObjectionCoaching()
+                let quote = phrase + " " + qualifier + "."
+                coaching.consumeFinalized(Utterance(text: quote, speaker: .them, timestamp: epoch))
+                XCTAssertTrue(coaching.cards.isEmpty, quote)
+            }
+        }
+    }
+
+    func testFullCollectionRetainsActiveIdentityWhenAnUtteranceAddsAndRepeatsCategories() throws {
+        for repeated in examples {
+            for incoming in examples where incoming.0 != repeated.0 {
+                var coaching = ObjectionCoaching()
+                let active = [repeated] + examples.filter { $0.0 != repeated.0 && $0.0 != incoming.0 }.prefix(4)
+                for (index, example) in active.enumerated() {
+                    coaching.consumeFinalized(Utterance(
+                        text: example.1[0], speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))
+                    ))
+                }
+                let original = try XCTUnwrap(coaching.cards.first { $0.category == repeated.0 })
+                XCTAssertEqual(coaching.cards.count, 5)
+                let quote = incoming.1[0] + " " + repeated.1[0]
+                coaching.consumeFinalized(Utterance(
+                    text: quote, speaker: .them, timestamp: epoch.addingTimeInterval(5)
+                ))
+                let updated = try XCTUnwrap(coaching.cards.first { $0.category == repeated.0 })
+                XCTAssertEqual(updated.id, original.id, "\(incoming.0) + \(repeated.0)")
+                XCTAssertEqual(updated.quote, quote)
+                XCTAssertEqual(coaching.cards.count, 5)
+                XCTAssertEqual(Set(coaching.cards.map(\.category)).count, 5)
+                XCTAssertEqual(Set(coaching.cards.prefix(2).map(\.category)), [incoming.0, repeated.0])
+            }
+        }
+    }
+
     func testMultipleCategoriesInOneUtteranceAreIndependentAndVisibleCollectionIsBoundedNewestFirst() throws {
         var coaching = ObjectionCoaching()
         let multi = "We don't have the budget, not interested, send me information."

@@ -54,7 +54,7 @@ struct ObjectionCoaching {
                 max(end, rule.phrase.matches(in: text, range: range).last.map { NSMaxRange($0.range) } ?? 0)
             }
             let prefix = (text as NSString).substring(from: completedEnd)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: .whitespaces)
             if !prefix.isEmpty {
                 boundary = prefix.utf16.count + 1
                 combined = prefix + " " + current
@@ -82,8 +82,8 @@ struct ObjectionCoaching {
                 id: id, category: rule.category, title: rule.title, quote: quote,
                 suggestedReply: rule.reply, followUpQuestion: rule.question
             ), at: 0)
-            if cards.count > 5 { cards.removeLast() }
         }
+        if cards.count > 5 { cards.removeLast(cards.count - 5) }
     }
 
     mutating func dismiss(_ id: UUID, now: Date = .now) {
@@ -105,16 +105,16 @@ struct ObjectionCoaching {
         let reply: String
         let question: String
         let phrase: NSRegularExpression
-        let nonObjectionSuffix: NSRegularExpression
+        let nonObjectionSuffix: NSRegularExpression?
 
         init(_ category: ObjectionCategory, _ title: String, _ reply: String,
-             _ question: String, _ pattern: String, suffix: String = #"^ (?:anymore|any longer)\b"#) {
+             _ question: String, _ pattern: String, suffix: String? = nil) {
             self.category = category
             self.title = title
             self.reply = reply
             self.question = question
             phrase = try! NSRegularExpression(pattern: #"\b(?:"# + pattern + #")\b"#)
-            nonObjectionSuffix = try! NSRegularExpression(pattern: suffix)
+            nonObjectionSuffix = suffix.map { try! NSRegularExpression(pattern: $0) }
         }
     }
 
@@ -124,27 +124,27 @@ struct ObjectionCoaching {
              "I hear you. Let's weigh the cost against the outcome you need before deciding whether it makes sense.",
              "Is the main concern the available budget, or whether the outcome justifies the cost?",
              #"too (?:expensive|pricey|pricy|costly)|(?:price|cost|pricing) (?:is |seems |feels )?too (?:high|much)|(?:cant|cannot|can not) afford|(?:dont|do not) have (?:the |any |enough )?budget|(?:no|not enough|insufficient) budget|(?:over|outside|beyond) (?:our|my|the) budget"#,
-             suffix: #"^ (?:issues?|problems?|concerns?|limits?|constraints?|needed|required|anymore|any longer)\b"#),
+             suffix: #"^ (?:issues?|problems?|concerns?|limits?|constraints?|needed|required)\b"#),
         Rule(.timingPriority, "Timing / priority",
              "Understood. We can work around your priorities rather than force a decision now.",
              "What would need to change for this to become a priority?",
              #"not (?:right )?now|(?:bad|wrong) time|(?:not|isnt) (?:a |our |my )?priority|(?:dont|do not) have time|too busy|(?:call|check|come) back (?:later|next (?:week|month|quarter))"#,
-             suffix: #"^ (?:a (?:bad|wrong) time|too busy|not (?:a )?priority|anymore|any longer)\b"#),
+             suffix: #"^ (?:a (?:bad|wrong) time|too busy|not (?:a )?priority)\b"#),
         Rule(.existingProvider, "Existing provider",
              "That makes sense. I don't want to replace something that is working without a clear reason.",
              "Is there anything your current approach leaves unresolved?",
              #"(?:already|currently) (?:have|use|using|work with|working with) (?:a |an |another |our )?(?:provider|vendor|supplier|solution|tool)|(?:happy|satisfied) with (?:our|my|the) (?:current |existing )?(?:provider|vendor|supplier|solution)|(?:under|in) (?:a )?contract with"#,
-             suffix: #"^ (?:issues?|problems?|concerns?|anymore|any longer)\b"#),
+             suffix: #"^ (?:issues?|problems?|concerns?)\b"#),
         Rule(.lackOfInterest, "Interest / need",
              "Understood. I don't want to push something you don't need.",
              "Is this already handled, or simply not relevant to your team?",
              #"(?:not|arent|isnt) interested|(?:dont|do not|doesnt|does not) need (?:it|this|that|a new|another)|(?:no|dont see|do not see) (?:a )?need for|(?:not|isnt) relevant|(?:not|isnt) necessary"#,
-             suffix: #"^ (?:in (?:delaying|waiting)|to (?:wait|delay)|anymore|any longer)\b"#),
+             suffix: #"^ (?:in (?:delaying|waiting)|to (?:wait|delay))\b"#),
         Rule(.sendInformation, "Send information / email",
              "I can send a brief summary so you can decide whether it is worth exploring.",
              "What should the summary address to be useful to you?",
              #"(?:send|email) (?:me|us) (?:an? |some |the |more )?(?:email|information|info|details|summary|brochure)|(?:just )?email (?:me|us)|(?:put|send) (?:it|that|this) in (?:an? )?email"#,
-             suffix: #"^ (?:is (?:not|irrelevant)|anymore|any longer)\b"#),
+             suffix: #"^ (?:is (?:not|irrelevant))\b"#),
         Rule(.decisionMaker, "Authority / decision maker",
              "Thanks for clarifying. Let's respect how your team makes this decision.",
              "Who else should be involved, and what will they need to evaluate?",
@@ -161,6 +161,7 @@ struct ObjectionCoaching {
     private static let denial = try! NSRegularExpression(
         pattern: #"\b(?:not|never|no|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|cannot|do not|does not)\b"#
     )
+    private static let endedObjectionSuffix = try! NSRegularExpression(pattern: #"^ (?:anymore|any longer)\b"#)
 
     private static func normalize(_ text: String) -> String {
         let lowercase = text.lowercased()
@@ -172,7 +173,7 @@ struct ObjectionCoaching {
         )
         return wordBreak.stringByReplacingMatches(
             in: separated, range: NSRange(separated.startIndex..., in: separated), withTemplate: " "
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        ).trimmingCharacters(in: .whitespaces)
     }
 
     private static func matches(_ rule: Rule, in text: String, crossing boundary: Int? = nil) -> Bool {
@@ -188,7 +189,14 @@ struct ObjectionCoaching {
                 continue
             }
             let suffix = String(text[phraseRange.upperBound...])
-            if rule.nonObjectionSuffix.firstMatch(in: suffix, range: NSRange(suffix.startIndex..., in: suffix)) != nil {
+            let suffixRange = NSRange(suffix.startIndex..., in: suffix)
+            if rule.nonObjectionSuffix?.firstMatch(in: suffix, range: suffixRange) != nil {
+                continue
+            }
+            let phrase = String(text[phraseRange])
+            if endedObjectionSuffix.firstMatch(in: suffix, range: suffixRange) != nil,
+               denial.firstMatch(in: phrase, range: NSRange(phrase.startIndex..., in: phrase)) == nil,
+               !phrase.hasPrefix("insufficient budget") {
                 continue
             }
             return true

@@ -134,6 +134,8 @@ Split quotes retain the raw chunks, separated by newlines. A rep turn,
 a different remote speaker, or a longer gap breaks the context. The detector
 retains at most twelve chunks within the window and does not replay a completed
 objection merely because unrelated text follows it.
+Sentence and clause boundaries end negation scope; an unfinished clause still
+carries negation into the next eligible chunk.
 The live-content column scrolls in smaller windows while call controls stay
 visible. Waiting text changes while recording is paused. Cards do not open
 modal popups or request keyboard focus.
@@ -142,6 +144,9 @@ This is **local English phrase matching, not a semantic classifier**. It
 normalizes case, straight/curly apostrophes, contractions, and punctuation,
 rejects incidental keywords such as “email,” “budget,” and “provider,” and
 checks simple clause-level negations such as “It is not too expensive.”
+“Anymore” and “any longer” preserve negative objections such as “We don't have
+the budget anymore,” while neutralized phrases such as “It isn't too expensive
+anymore” remain suppressed.
 Unlisted paraphrases, indirect objections, sarcasm, complex negation,
 remote quotations/hypotheticals, other languages, and transcription or
 speaker-attribution errors can cause misses or false positives. A recognized
