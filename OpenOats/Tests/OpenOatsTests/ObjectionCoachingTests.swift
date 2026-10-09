@@ -96,6 +96,113 @@ final class ObjectionCoachingTests: XCTestCase {
         }
     }
 
+    func testNegatedCompletedPhrasesRetainScopeForUnfinishedAlternatives() {
+        let alternatives = [
+            ("It is not too expensive or outside", "our budget."),
+            ("Do not email me or send", "me information."),
+            ("I didn't say too expensive or outside", "our budget."),
+            ("I didn't say too expensive or a bad", "time."),
+            ("I didn't say too expensive or already have a", "provider."),
+            ("I didn't say too expensive or not", "interested."),
+            ("I didn't say too expensive or send", "me information."),
+            ("I didn't say too expensive or need to check with my", "boss."),
+            ("I didn't say too expensive or migration would be too", "difficult.")
+        ]
+        for (first, second) in alternatives {
+            for chunks in [[first + " " + second], [first, second]] {
+                var coaching = ObjectionCoaching()
+                for (index, text) in chunks.enumerated() {
+                    coaching.consumeFinalized(Utterance(
+                        text: text, speaker: .remote(2), timestamp: epoch.addingTimeInterval(Double(index))
+                    ))
+                    XCTAssertTrue(coaching.cards.isEmpty, chunks.joined(separator: " / "))
+                }
+            }
+        }
+    }
+
+    func testOldCompletedMatchesCannotValidateNegatedCurrentMatchesOrReplay() {
+        for (_, positives, _) in examples {
+            var coaching = ObjectionCoaching()
+            let first = positives[0].trimmingCharacters(in: CharacterSet(charactersIn: ".!?")) + " or I didn't say"
+            coaching.consumeFinalized(Utterance(text: first, speaker: .them, timestamp: epoch))
+            let original = coaching.cards
+            XCTAssertEqual(original.count, 1, first)
+            coaching.consumeFinalized(Utterance(text: positives[0], speaker: .them, timestamp: epoch.addingTimeInterval(1)))
+            XCTAssertEqual(coaching.cards, original, first + " / " + positives[0])
+            coaching.consumeFinalized(Utterance(text: "Thanks for explaining.", speaker: .them, timestamp: epoch.addingTimeInterval(2)))
+            XCTAssertEqual(coaching.cards, original)
+        }
+    }
+
+    func testCommaClausesRecognizeContractedSubjectsAndPlaybookImperatives() {
+        let clauses: [(ObjectionCategory, String)] = [
+            (.priceBudget, "that's too pricey."),
+            (.timingPriority, "we're too busy."),
+            (.timingPriority, "it's a bad time."),
+            (.timingPriority, "call back next week."),
+            (.timingPriority, "check back later."),
+            (.timingPriority, "come back next month."),
+            (.existingProvider, "we're happy with our current vendor."),
+            (.lackOfInterest, "I'm not interested."),
+            (.lackOfInterest, "I've no need for this."),
+            (.lackOfInterest, "we've no need for this."),
+            (.sendInformation, "email me."),
+            (.sendInformation, "just email me."),
+            (.sendInformation, "just   email me."),
+            (.sendInformation, "put it in an email."),
+            (.sendInformation, "send me information."),
+            (.decisionMaker, "I'm not the decision maker."),
+            (.decisionMaker, "I'd need to check with my boss."),
+            (.decisionMaker, "I'll need to check with my boss."),
+            (.decisionMaker, "we'd need to check with our boss."),
+            (.decisionMaker, "we'll need to check with our boss."),
+            (.implementationEffort, "I'm worried about the integration."),
+            (.implementationEffort, "it's too hard to implement."),
+            (.implementationEffort, "it'd be too hard to implement."),
+            (.implementationEffort, "it'll be too hard to implement."),
+            (.implementationEffort, "that'd be too hard to implement."),
+            (.implementationEffort, "that'll be too hard to implement.")
+        ]
+        for apostrophe in ["'", "’", "‘"] {
+            let prefix = "We don't have the budget,".replacingOccurrences(of: "'", with: apostrophe)
+            for (category, clause) in clauses {
+                let current = clause.replacingOccurrences(of: "'", with: apostrophe)
+                for chunks in [[prefix + " " + current], [prefix, current]] {
+                    var coaching = ObjectionCoaching()
+                    for (index, text) in chunks.enumerated() {
+                        coaching.consumeFinalized(Utterance(
+                            text: text, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))
+                        ))
+                    }
+                    XCTAssertEqual(Set(coaching.cards.map(\.category)), [.priceBudget, category], chunks.joined(separator: " / "))
+                    XCTAssertEqual(coaching.cards.first { $0.category == category }?.quote, chunks.last)
+                }
+            }
+        }
+        let exact = "We don't have the budget, I'm not interested, email me."
+        var coaching = ObjectionCoaching()
+        coaching.consumeFinalized(Utterance(text: exact, speaker: .them, timestamp: epoch))
+        XCTAssertEqual(Set(coaching.cards.map(\.category)), [.priceBudget, .lackOfInterest, .sendInformation])
+        XCTAssertTrue(coaching.cards.allSatisfy { $0.quote == exact })
+    }
+
+    func testCommasWithinNegatedListsDoNotEndSharedNegation() {
+        for text in [
+            "It is not too expensive, outside our budget.",
+            "I didn't say not now, too busy.",
+            "We're not happy with our current vendor, under contract with Acme.",
+            "I didn't say not interested, don't need this.",
+            "Do not email me, or send me information.",
+            "I didn't say not the decision maker, need to check with my boss.",
+            "I'm not worried about the integration, too hard to implement."
+        ] {
+            var coaching = ObjectionCoaching()
+            coaching.consumeFinalized(Utterance(text: text, speaker: .them, timestamp: epoch))
+            XCTAssertTrue(coaching.cards.isEmpty, text)
+        }
+    }
+
     func testTemporalQualifiersPreserveNegativeObjectionsAndSuppressNeutralizedPhrases() {
         let negativeObjections: [(ObjectionCategory, String, String)] = [
             (.priceBudget, "We don't have the", "budget"),

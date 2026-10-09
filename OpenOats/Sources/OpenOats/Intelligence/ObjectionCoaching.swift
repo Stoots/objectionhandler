@@ -25,7 +25,7 @@ struct ObjectionCard: Identifiable, Equatable, Sendable {
 struct ObjectionCoaching {
     private(set) var cards: [ObjectionCard] = []
     private var lastProcessedUtteranceID: UUID?
-    private var remoteChunks: [(utterance: Utterance, normalized: String)] = []
+    private var remoteChunks: [Utterance] = []
     private var suppressedUntil: [ObjectionCategory: Date] = [:]
 
     mutating func consumeFinalized(_ utterance: Utterance, now: Date = .now) {
@@ -36,43 +36,25 @@ struct ObjectionCoaching {
             return
         }
 
-        let current = Self.normalize(utterance.text)
-        var combined: String?
-        var boundary = 0
         if let previous = remoteChunks.last,
-           previous.utterance.speaker != utterance.speaker ||
-           !(0...15).contains(utterance.timestamp.timeIntervalSince(previous.utterance.timestamp)) {
+           previous.speaker != utterance.speaker ||
+           !(0...15).contains(utterance.timestamp.timeIntervalSince(previous.timestamp)) {
             remoteChunks.removeAll(keepingCapacity: true)
         }
-        remoteChunks.removeAll { utterance.timestamp.timeIntervalSince($0.utterance.timestamp) > 15 }
-        if !remoteChunks.isEmpty {
-            let text = remoteChunks.map { $0.normalized }.joined(separator: " ")
-            let range = NSRange(text.startIndex..., in: text)
-            // Retain unfinished text after the last complete phrase, including negated ones.
-            // This allows "too expensive and send" + "me information" without replaying price.
-            let completedEnd = Self.playbook.reduce(0) { end, rule in
-                max(end, rule.phrase.matches(in: text, range: range).last.map { NSMaxRange($0.range) } ?? 0)
-            }
-            let prefix = (text as NSString).substring(from: completedEnd)
-                .trimmingCharacters(in: .whitespaces)
-            if !prefix.isEmpty {
-                boundary = prefix.utf16.count + 1
-                combined = prefix + " " + current
-            }
-        }
-        remoteChunks.append((utterance, current))
+        remoteChunks.removeAll { utterance.timestamp.timeIntervalSince($0.timestamp) > 15 }
+        remoteChunks.append(utterance)
         // All playbook phrases fit within twelve words; bound retained fragmented input too.
         if remoteChunks.count > 12 { remoteChunks.removeFirst() }
+        let text = Self.normalize(remoteChunks.map(\.text).joined(separator: " "))
+        let boundary = text.utf16.count - Self.normalize(utterance.text).utf16.count
 
         for rule in Self.playbook {
             guard suppressedUntil[rule.category].map({ now >= $0 }) ?? true else { continue }
             let quote: String
-            if Self.matches(rule, in: current),
-               combined.map({ Self.matches(rule, in: $0) }) ?? true {
+            if Self.matches(rule, in: text, startingAt: boundary) {
                 quote = utterance.text
-            } else if let combined,
-                      Self.matches(rule, in: combined, crossing: boundary) {
-                quote = remoteChunks.map { $0.utterance.text }.joined(separator: "\n")
+            } else if Self.matches(rule, in: text, crossing: boundary) {
+                quote = remoteChunks.map(\.text).joined(separator: "\n")
             } else {
                 continue
             }
@@ -155,7 +137,7 @@ struct ObjectionCoaching {
              #"(?:implementation|migration|switching|changing|rollout|integration) (?:is |seems |would be |will be )?too (?:hard|difficult|complex|disruptive|much work)|too (?:hard|difficult|complex) to (?:implement|switch|migrate|integrate)|(?:cant|cannot|can not) (?:handle|manage) (?:the |a )?(?:migration|implementation|transition)|(?:dont|do not) want to (?:switch|change|migrate)|(?:worried|concerned) about (?:the |a )?(?:implementation|migration|integration|disruption)"#),
     ]
     private static let clauseBreak = try! NSRegularExpression(
-        pattern: #"[.!?;\n]|\b(?:but|however|yet|and)\b|,(?=\s*(?:i|we|it|this|that|our|the|please|send|not)\b)"#
+        pattern: #"[.!?;\n]|\b(?:but|however|yet|and)\b|,(?=\s*(?:i(?:m|ve|d|ll)?|we(?:re|ve|d|ll)?|it(?:s|d|ll)?|this|that(?:s|d|ll)?|our|the|please|(?:just\s+)?(?:send|email|put|call|check|come)|not)\b)"#
     )
     private static let wordBreak = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\n]+"#)
     private static let denial = try! NSRegularExpression(
@@ -176,9 +158,10 @@ struct ObjectionCoaching {
         ).trimmingCharacters(in: .whitespaces)
     }
 
-    private static func matches(_ rule: Rule, in text: String, crossing boundary: Int? = nil) -> Bool {
+    private static func matches(_ rule: Rule, in text: String, startingAt start: Int = 0, crossing boundary: Int? = nil) -> Bool {
         let range = NSRange(text.startIndex..., in: text)
         for match in rule.phrase.matches(in: text, range: range) {
+            guard match.range.location >= start else { continue }
             if let boundary, !(match.range.location < boundary && NSMaxRange(match.range) > boundary) {
                 continue // An old complete objection plus unrelated text is not a new objection.
             }
