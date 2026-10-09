@@ -4,6 +4,8 @@ enum UITestScenario: String {
     case launchSmoke
     case sessionSmoke
     case objectionSmoke
+    case playbookSmoke
+    case effortSmoke
     case notesSmoke
     case wizardSmoke
 }

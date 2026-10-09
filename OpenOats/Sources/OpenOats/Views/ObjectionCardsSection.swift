@@ -12,7 +12,7 @@ struct ObjectionCardsSection: View {
             if cards.isEmpty {
                 Text(isRecordingPaused
                      ? "Recording paused. Coaching resumes with finalized remote speech."
-                     : "Waiting for a finalized remote price or budget objection.")
+                     : "Waiting for a finalized remote objection.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

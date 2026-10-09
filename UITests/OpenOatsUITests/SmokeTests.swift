@@ -65,6 +65,70 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
     }
 
+    func testPlaybookCardsSplitPhraseDuplicateDismissalPauseAndReset() {
+        let app = launchApp(scenario: "playbookSmoke")
+        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        let quotes = [
+            ("timingPriority", "Call back next quarter."),
+            ("sendInformation", "Send me\nsome information."),
+            ("lackOfInterest", "I'm not interested."),
+            ("existingProvider", "We already have a provider."),
+            ("priceBudget", "That is too expensive!"),
+        ]
+        for (category, expected) in quotes {
+            let quote = element(in: app, identifier: "app.objections.quote.\(category)")
+            XCTAssertTrue(quote.waitForExistence(timeout: 10))
+            XCTAssertEqual(quote.value as? String, expected)
+            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.\(category)").count, 1)
+            XCTAssertTrue(element(in: app, identifier: "app.objections.reply.\(category)").exists)
+            XCTAssertTrue(element(in: app, identifier: "app.objections.followUp.\(category)").exists)
+        }
+        let timing = element(in: app, identifier: "app.objections.quote.timingPriority")
+        XCTAssertTrue(timing.isHittable)
+        XCTAssertEqual(app.sheets.count, 0)
+        let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
+        screenshot.name = "Scripted playbook newest card and five-card collection"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        element(in: app, identifier: "app.controlBar.pauseToggle").click()
+        XCTAssertEqual(timing.value as? String, "Call back next quarter.")
+        element(in: app, identifier: "app.controlBar.pauseToggle").click()
+        element(in: app, identifier: "app.objections.dismiss.timingPriority").click()
+        XCTAssertFalse(timing.exists)
+        let split = element(in: app, identifier: "app.objections.quote.sendInformation")
+        XCTAssertTrue(split.isHittable)
+        let splitScreenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
+        splitScreenshot.name = "Scripted split information phrase after timing dismissal"
+        splitScreenshot.lifetime = .keepAlways
+        add(splitScreenshot)
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        XCTAssertTrue(element(in: app, identifier: "app.sessionEndedBanner").waitForExistence(timeout: 15))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        XCTAssertTrue(timing.waitForExistence(timeout: 10), "New session clears dismissal suppression")
+        XCTAssertEqual(timing.value as? String, "Call back next quarter.")
+    }
+
+    func testDecisionMakerAndImplementationCardsFromSingleRemoteUtterance() {
+        let app = launchApp(scenario: "effortSmoke")
+        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        let expected = "I'm not the decision maker. Migration would be too difficult."
+        for category in ["implementationEffort", "decisionMaker"] {
+            let quote = element(in: app, identifier: "app.objections.quote.\(category)")
+            XCTAssertTrue(quote.waitForExistence(timeout: 10))
+            XCTAssertEqual(quote.value as? String, expected)
+            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.\(category)").count, 1)
+        }
+        XCTAssertTrue(element(in: app, identifier: "app.objections.quote.implementationEffort").isHittable)
+        let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
+        screenshot.name = "Scripted simultaneous implementation and authority objections"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        element(in: app, identifier: "app.objections.dismiss.implementationEffort").click()
+        XCTAssertTrue(element(in: app, identifier: "app.objections.quote.decisionMaker").isHittable)
+    }
+
     func testSessionSmokeShowsEndedBanner() {
         let app = launchApp(scenario: "sessionSmoke")
 
@@ -199,6 +263,8 @@ final class SmokeTests: XCTestCase {
         app.launchEnvironment["OPENOATS_UI_TEST"] = "1"
         app.launchEnvironment["OPENOATS_UI_SCENARIO"] = scenario
         app.launchEnvironment["OPENOATS_UI_TEST_RUN_ID"] = UUID().uuidString
+        // A prior manual run may have saved all windows closed; scenarios own startup state.
+        app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         return app
     }

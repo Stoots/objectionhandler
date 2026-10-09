@@ -92,7 +92,7 @@ Or build from source:
 
 The first run downloads the local speech model (~600 MB).
 
-### Local price/budget coaching
+### Local objection playbook
 
 Start a session with the usual recording consent and audio permissions. The
 **Objection coaching** section in the existing main window waits for finalized
@@ -101,42 +101,71 @@ speech and partial transcript hypotheses do not trigger cards. No LLM API key
 or knowledge-base setup is needed; the selected transcription model still
 needs its normal setup/download. Suggestions and Sidecast remain independent.
 
-Examples include “That is too expensive,” “We don't have the budget,”
-“We can't afford it,” and “This is outside our budget.” A card shows the
-prospect's exact raw transcript quote, a product-neutral suggested spoken
-reply, and a follow-up question. Read these as prompts, not verified claims
+The local playbook covers seven categories:
+
+| Category | Representative prospect phrases |
+| --- | --- |
+| Price / budget | “That is too expensive”; “We don't have the budget” |
+| Timing / priority | “Not now”; “This is not a priority”; “Call back next quarter” |
+| Existing provider | “We already have a provider”; “We're happy with our current vendor” |
+| Interest / need | “I'm not interested”; “We don't need this” |
+| Send information / email | “Send me some information”; “Just email me” |
+| Authority / decision maker | “I'm not the decision maker”; “I need to check with my boss” |
+| Implementation / change effort | “Migration would be too difficult”; “We don't want to switch” |
+
+A card shows the prospect's exact raw transcript quote, a product-neutral
+suggested spoken reply, and a follow-up question. Read these as prompts,
+not verified claims
 about your product. Coaching adds no network requests; any configured cloud
 transcription or assistant features retain their existing network behavior.
 
-Repeated price/budget objections update the active category card and retain
-its identity. Use the card's **×** button to dismiss it. Polling does not bring
-a dismissed card back, but a new finalized objection can. Starting a new
-session or discarding the current one clears coaching/detection state.
+Repeated objections update the active category card, retain its identity, and
+move it to the top. There is at most one active card per category and at most
+five cards, newest first; older cards leave the visible collection.
+Use the card's **×** button to dismiss it. That category is suppressed for
+30 seconds after dismissal; only a later qualifying finalized objection can
+resurface it. Polling or unrelated speech does not restore dismissed cards.
+Starting a new session or discarding the current one clears cards, suppression,
+and split-phrase context.
+
+Adjacent finalized chunks from the same remote speaker can complete a phrase
+within a 15-second window, for example “Send me” followed by “some information.”
+Split quotes retain the raw chunks, separated by newlines. A rep turn,
+a different remote speaker, or a longer gap breaks the context. The detector
+retains at most twelve chunks within the window and does not replay a completed
+objection merely because unrelated text follows it.
 The live-content column scrolls in smaller windows while call controls stay
 visible. Waiting text changes while recording is paused. Cards do not open
 modal popups or request keyboard focus.
 
 This is **local English phrase matching, not a semantic classifier**. It
 normalizes case, straight/curly apostrophes, contractions, and punctuation,
-rejects incidental price/budget mentions, and checks simple clause-level
-negations such as “It is not too expensive.” Unlisted paraphrases, indirect
-objections, sarcasm, complex negation, remote quotations/hypotheticals, other
-languages, and transcription or speaker-attribution errors can cause misses
-or false positives. Only price/budget coaching is supported.
+rejects incidental keywords such as “email,” “budget,” and “provider,” and
+checks simple clause-level negations such as “It is not too expensive.”
+Unlisted paraphrases, indirect objections, sarcasm, complex negation,
+remote quotations/hypotheticals, other languages, and transcription or
+speaker-attribution errors can cause misses or false positives. A recognized
+phrase is a coaching cue, not proof of the prospect's intent.
 
 For isolated scripted verification (no audio is captured):
 
 ```sh
 swift build --package-path OpenOats --product OpenOats
-OPENOATS_UI_TEST=1 OPENOATS_UI_SCENARIO=objectionSmoke \
+OPENOATS_UI_TEST=1 OPENOATS_UI_SCENARIO=playbookSmoke \
 OPENOATS_UI_TEST_RUN_ID="$(uuidgen)" ./OpenOats/.build/debug/OpenOats
 ```
 
-Start the session to replay microphone, incidental/negated remote, price, and
-repeated remote-budget inputs through the existing transcription/session path.
-Expect one card quoting “We don’t have the budget!”; dismiss, stop, and start
-again to check reset. This uses ephemeral credentials/settings and temporary
-session files, not your normal workspace. Regression coverage:
+Start the session to replay local speech, incidental/negated remote speech,
+five objection categories, a split information request, and a repeated timing
+objection through the existing transcription/session path. Expect five cards
+with “Call back next quarter.” at the top and “Send me” / “some information.”
+as the split quote. Dismiss timing, pause/resume, stop, and start again to check
+reset. Use `OPENOATS_UI_SCENARIO=effortSmoke` in a separate app run for authority
+and implementation objections in one remote utterance. The existing
+`objectionSmoke` price scenario remains available.
+
+These scenarios use ephemeral credentials/settings and temporary session files,
+not your normal workspace. Regression coverage:
 
 ```sh
 swift test --package-path OpenOats --filter 'ObjectionCoachingTests|LiveSessionControllerTests'
@@ -147,7 +176,10 @@ The native UI suite requires macOS UI-testing automation authorization.
 Scripted input does **not** verify microphone capture, a Core Audio tap, speech
 recognition accuracy, or a live call. Use the separate
 [real-device audio check](docs/macos-compatibility.md#audio-regressions-covered)
-with known price/budget speech to verify those.
+with known objection speech to verify capture separately. Run native UI tests
+and live-capture checks sequentially with only one test app open, because both
+register the global recording shortcut. Restore temporary Developer Tools and
+UI automation authorization after verification.
 
 ## What you need
 

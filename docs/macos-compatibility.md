@@ -83,6 +83,30 @@ The XCTest UI suite uses scripted transcripts and is separate from audio
 capture verification. Run those checks sequentially with only one test app
 open: both app instances register the global recording shortcut.
 
+The full objection playbook was also exercised on this host with controlled
+external playback and the microphone muted. Parakeet TDT v2 finalized
+“This is not a priority, we already have a provider.” as **Them**; the native
+window displayed both timing/priority and existing-provider cards quoting that
+exact transcript. This used a real local transcription engine in an isolated
+temporary workspace, not scripted utterances. Repeated external playback
+finalized “Not now, we currently use a vendor.” and updated the same two
+category cards. Dismissing provider suppressed a qualifying captured repeat
+nine seconds later while timing stayed active; provider resurfaced on a new
+captured repeat more than 30 seconds after dismissal. The saved M4A contained
+system audio with no microphone samples. The playbook's separate scripted
+native UI suite passed 13 tests, including all seven categories across two
+scenarios, split information requests, repeated timing quotes, dismissal,
+pause/resume, and new-session reset.
+
+For current macOS hosts, inspect `/usr/bin/automationmodetool` before changing
+UI-testing authorization: this host's executable uses
+`enable-automationmode-without-authentication` and
+`disable-automationmode-without-authentication`, whereas its installed manual
+lists an obsolete spelling. Run authorization changes only with approval and
+restore the original policy and Developer Tools state afterward. The native
+test launcher ignores saved window restoration so a prior manual run with
+closed windows does not change scenario startup.
+
 For diagnosis, enable Settings → General → Diagnostic logging and inspect the
 system-audio events or export diagnostics. Successful startup should report a
 nonzero tap ID, a resolved tap format and a successful device start. An absent

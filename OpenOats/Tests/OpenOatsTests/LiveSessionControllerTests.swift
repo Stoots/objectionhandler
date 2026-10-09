@@ -175,9 +175,7 @@ final class LiveSessionControllerTests: XCTestCase {
 
             coordinator.transcriptStore.append(Utterance(text: "We cannot afford this", speaker: .remote(4)))
             controller.syncProjectedState(settings: settings)
-            let resurfaced = try XCTUnwrap(controller.state.objectionCards.first)
-            XCTAssertNotEqual(resurfaced.id, first.id)
-            XCTAssertEqual(resurfaced.quote, "We cannot afford this")
+            XCTAssertTrue(controller.state.objectionCards.isEmpty, "Dismissal suppresses new objections for 30 seconds")
             controller.discardSession()
             XCTAssertTrue(controller.state.objectionCards.isEmpty)
         }

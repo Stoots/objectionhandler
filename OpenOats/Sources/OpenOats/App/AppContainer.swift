@@ -171,10 +171,17 @@ final class AppContainer {
                 settings: settings
             )
         case .uiTest(let scenario):
+            let utterances: [Utterance]
+            switch scenario {
+            case .objectionSmoke: utterances = Self.scriptedObjections
+            case .playbookSmoke: utterances = Self.scriptedPlaybook
+            case .effortSmoke: utterances = Self.scriptedEffort
+            default: utterances = Self.scriptedUtterances
+            }
             transcriptionEngine = TranscriptionEngine(
                 transcriptStore: coordinator.transcriptStore,
                 settings: settings,
-                mode: .scripted(scenario == .objectionSmoke ? Self.scriptedObjections : Self.scriptedUtterances)
+                mode: .scripted(utterances)
             )
         }
 
@@ -374,6 +381,25 @@ final class AppContainer {
         Utterance(text: "It is not too expensive.", speaker: .remote(1)),
         Utterance(text: "That is too expensive!", speaker: .them),
         Utterance(text: "We don’t have the budget!", speaker: .remote(2)),
+    ]
+
+    private static let scriptedPlaybook: [Utterance] = [
+        Utterance(text: "Not now. Send me information. We already have a provider.", speaker: .you),
+        Utterance(text: "Email, budget, provider, implementation.", speaker: .them),
+        Utterance(text: "It is not too expensive. We're not too busy.", speaker: .them),
+        Utterance(text: "That is too expensive!", speaker: .remote(1)),
+        Utterance(text: "This is not a priority.", speaker: .remote(2)),
+        Utterance(text: "We already have a provider.", speaker: .remote(3)),
+        Utterance(text: "I'm not interested.", speaker: .remote(4)),
+        Utterance(text: "Send me", speaker: .them),
+        Utterance(text: "some information.", speaker: .them),
+        Utterance(text: "Call back next quarter.", speaker: .remote(2)),
+    ]
+
+    private static let scriptedEffort: [Utterance] = [
+        Utterance(text: "I cannot approve this. Migration would be too difficult.", speaker: .you),
+        Utterance(text: "Migration is not too difficult.", speaker: .them),
+        Utterance(text: "I'm not the decision maker. Migration would be too difficult.", speaker: .remote(3)),
     ]
 
     private static let scriptedUtterances: [Utterance] = [
