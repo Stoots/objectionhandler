@@ -135,6 +135,113 @@ final class ObjectionCoachingTests: XCTestCase {
         }
     }
 
+    func testIndependentUtterancesAfterCompleteUnpunctuatedClausesDoNotInheritNegation() {
+        for (category, positives, _) in examples {
+            for previous in ["It is not too expensive", "We don't have the budget", "We don't have the budget anymore"] {
+                var coaching = ObjectionCoaching()
+                coaching.consumeFinalized(Utterance(text: previous, speaker: .them, timestamp: epoch))
+                let originalPriceID = coaching.cards.first { $0.category == .priceBudget }?.id
+                let current = positives[0]
+                coaching.consumeFinalized(Utterance(text: current, speaker: .them, timestamp: epoch.addingTimeInterval(1)))
+                XCTAssertEqual(coaching.cards.first?.category, category, previous + " / " + current)
+                XCTAssertEqual(coaching.cards.first?.quote, current)
+                if let originalPriceID {
+                    XCTAssertEqual(coaching.cards.first { $0.category == .priceBudget }?.id, originalPriceID)
+                }
+            }
+        }
+        var coaching = ObjectionCoaching()
+        for (index, quote) in ["It is not too expensive", "That is too expensive!", "We don't have the budget", "We cannot afford this", "That's too pricey!"].enumerated() {
+            let id = coaching.cards.first?.id
+            coaching.consumeFinalized(Utterance(text: quote, speaker: .remote(2), timestamp: epoch.addingTimeInterval(Double(index))))
+            if index > 0 {
+                XCTAssertEqual(coaching.cards.count, 1)
+                XCTAssertEqual(coaching.cards.first?.quote, quote)
+                if let id { XCTAssertEqual(coaching.cards.first?.id, id) }
+            } else {
+                XCTAssertTrue(coaching.cards.isEmpty)
+            }
+        }
+    }
+
+    func testIndependentClauseBoundariesSurviveFurtherSplitChunks() {
+        var coaching = ObjectionCoaching()
+        let chunks = ["It is not too expensive", "We're too", "busy."]
+        for (index, text) in chunks.enumerated() {
+            coaching.consumeFinalized(Utterance(text: text, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))))
+            if index < 2 { XCTAssertTrue(coaching.cards.isEmpty) }
+        }
+        XCTAssertEqual(coaching.cards.map(\.category), [.timingPriority])
+        XCTAssertEqual(coaching.cards.first?.quote, chunks.joined(separator: "\n"))
+        for (first, second) in [
+            ("It is not too expensive or I didn't say", "That is too expensive!"),
+            ("Do not email me or send", "me information."),
+            ("It is not too expensive or outside", "our budget.")
+        ] {
+            coaching.reset()
+            coaching.consumeFinalized(Utterance(text: first, speaker: .them, timestamp: epoch))
+            coaching.consumeFinalized(Utterance(text: second, speaker: .them, timestamp: epoch.addingTimeInterval(1)))
+            XCTAssertTrue(coaching.cards.isEmpty, first + " / " + second)
+        }
+    }
+
+    func testSharedNegatedImperativeListsRemainSuppressedAcrossVerbsAndChunks() {
+        let commands = ["send me information", "email me", "put it in an email", "call back later", "check back later", "come back next week"]
+        let exactReports = [
+            ("Do not email me,", "call back later, or come back next week."),
+            ("Do not call back later,", "email me, or put it in an email.")
+        ]
+        for (first, second) in exactReports {
+            for chunks in [[first + " " + second], [first, second]] {
+                var coaching = ObjectionCoaching()
+                for (index, text) in chunks.enumerated() {
+                    coaching.consumeFinalized(Utterance(text: text, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))))
+                    XCTAssertTrue(coaching.cards.isEmpty, chunks.joined(separator: " / "))
+                }
+            }
+        }
+        for denial in ["Do not", "Don't", "Don’t", "Never", "Please do not"] {
+            for first in commands {
+                for second in commands {
+                    for conjunction in ["or", "and"] {
+                        let prefix = denial + " " + first + ","
+                        let current = second + ", " + conjunction + " just email me."
+                        for chunks in [[prefix + " " + current], [prefix, current]] {
+                            var coaching = ObjectionCoaching()
+                            for (index, text) in chunks.enumerated() {
+                                coaching.consumeFinalized(Utterance(text: text, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))))
+                                XCTAssertTrue(coaching.cards.isEmpty, chunks.joined(separator: " / "))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testIndependentImperativesAfterDeclarativeObjectionsStillQualify() {
+        let commands: [(ObjectionCategory, String)] = [
+            (.sendInformation, "send me information"), (.sendInformation, "email me"),
+            (.sendInformation, "put it in an email"), (.timingPriority, "call back later"),
+            (.timingPriority, "check back later"), (.timingPriority, "come back next week")
+        ]
+        for (category, command) in commands {
+            for separator in [",", " and", ""] {
+                let prefix = "We don't have the budget" + separator
+                let current = command + "."
+                for chunks in [[prefix + " " + current], [prefix, current]] {
+                    if separator.isEmpty && chunks.count == 1 { continue }
+                    var coaching = ObjectionCoaching()
+                    for (index, text) in chunks.enumerated() {
+                        coaching.consumeFinalized(Utterance(text: text, speaker: .them, timestamp: epoch.addingTimeInterval(Double(index))))
+                    }
+                    XCTAssertEqual(Set(coaching.cards.map(\.category)), [.priceBudget, category], chunks.joined(separator: " / "))
+                    XCTAssertEqual(coaching.cards.first { $0.category == category }?.quote, chunks.last)
+                }
+            }
+        }
+    }
+
     func testCommaClausesRecognizeContractedSubjectsAndPlaybookImperatives() {
         let clauses: [(ObjectionCategory, String)] = [
             (.priceBudget, "that's too pricey."),

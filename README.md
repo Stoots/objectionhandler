@@ -136,9 +136,14 @@ retains at most twelve chunks within the window and does not replay a completed
 objection merely because unrelated text follows it.
 Sentence and clause boundaries end negation scope; an unfinished clause still
 carries negation into the next eligible chunk.
+Recognized complete clauses can also end at an unpunctuated finalized chunk
+when the next chunk starts an independent clause; unfinished alternatives
+keep their context.
 Comma boundaries recognize supported subjects, including contractions, and
 playbook requests such as “email me”; commas in a shared negated list retain
 that negation scope.
+Explicit “do not” imperative lists keep their negation across supported
+requests, commas, and list conjunctions, including split chunks.
 The live-content column scrolls in smaller windows while call controls stay
 visible. Waiting text changes while recording is paused. Cards do not open
 modal popups or request keyboard focus.

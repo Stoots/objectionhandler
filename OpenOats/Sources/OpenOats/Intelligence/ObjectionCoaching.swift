@@ -45,7 +45,10 @@ struct ObjectionCoaching {
         remoteChunks.append(utterance)
         // All playbook phrases fit within twelve words; bound retained fragmented input too.
         if remoteChunks.count > 12 { remoteChunks.removeFirst() }
-        let text = Self.normalize(remoteChunks.map(\.text).joined(separator: " "))
+        let text = Self.normalize(remoteChunks.reduce("") { context, chunk in
+            let separator = Self.beginsIndependentClause(chunk.text, after: context) ? "\n" : " "
+            return context + separator + chunk.text
+        })
         let boundary = text.utf16.count - Self.normalize(utterance.text).utf16.count
 
         for rule in Self.playbook {
@@ -136,8 +139,24 @@ struct ObjectionCoaching {
              "Which part of the transition would be hardest for your team?",
              #"(?:implementation|migration|switching|changing|rollout|integration) (?:is |seems |would be |will be )?too (?:hard|difficult|complex|disruptive|much work)|too (?:hard|difficult|complex) to (?:implement|switch|migrate|integrate)|(?:cant|cannot|can not) (?:handle|manage) (?:the |a )?(?:migration|implementation|transition)|(?:dont|do not) want to (?:switch|change|migrate)|(?:worried|concerned) about (?:the |a )?(?:implementation|migration|integration|disruption)"#),
     ]
+    private static let subjectStart = #"(?:i(?:m|ve|d|ll)?|we(?:re|ve|d|ll)?|it(?:s|d|ll)?|this|that(?:s|d|ll)?|our|the|not)\b"#
+    private static let imperativeStart = #"(?:please\s+)?(?:just\s+)?(?:send|email|put|call|check|come)\b"#
     private static let clauseBreak = try! NSRegularExpression(
-        pattern: #"[.!?;\n]|\b(?:but|however|yet|and)\b|,(?=\s*(?:i(?:m|ve|d|ll)?|we(?:re|ve|d|ll)?|it(?:s|d|ll)?|this|that(?:s|d|ll)?|our|the|please|(?:just\s+)?(?:send|email|put|call|check|come)|not)\b)"#
+        pattern: #"[.!?;\n]|\b(?:but|however|yet)\b|(?:,|\band\b)(?=\s*"# + subjectStart + ")"
+    )
+    private static let listBreak = try! NSRegularExpression(
+        pattern: #"\band\b|,(?=\s*"# + imperativeStart + ")"
+    )
+    private static let negatedImperative = try! NSRegularExpression(
+        pattern: #"\b(?:dont|do not|never)\s+"# + imperativeStart
+    )
+    private static let imperativeClauseStart = try! NSRegularExpression(pattern: #"^\s*"# + imperativeStart)
+    private static let independentStart = try! NSRegularExpression(
+        pattern: #"^\s*(?:"# + subjectStart + "|" + imperativeStart + #"|(?:implementation|migration|switching|changing|rollout|integration)\b)"#
+    )
+    private static let continuationStart = try! NSRegularExpression(pattern: #"^\s*(?:or|nor|and)\b"#)
+    private static let completedSuffix = try! NSRegularExpression(
+        pattern: #"^(?: (?:it|this|that|anymore|any longer|for (?:it|this|that)))*$"#
     )
     private static let wordBreak = try! NSRegularExpression(pattern: #"[^\p{L}\p{N}\n]+"#)
     private static let denial = try! NSRegularExpression(
@@ -150,12 +169,41 @@ struct ObjectionCoaching {
             .replacingOccurrences(of: "'", with: "")
             .replacingOccurrences(of: "’", with: "")
             .replacingOccurrences(of: "‘", with: "")
-        let separated = clauseBreak.stringByReplacingMatches(
+        let clauses = clauseBreak.stringByReplacingMatches(
             in: lowercase, range: NSRange(lowercase.startIndex..., in: lowercase), withTemplate: "\n"
         )
+        let separated = clauses.components(separatedBy: "\n").map { clause in
+            let separatedClause = NSMutableString(string: clause)
+            for match in listBreak.matches(in: clause, range: NSRange(clause.startIndex..., in: clause)).reversed() {
+                let prefix = (clause as NSString).substring(to: match.range.location)
+                if negatedImperative.firstMatch(in: prefix, range: NSRange(prefix.startIndex..., in: prefix)) == nil {
+                    separatedClause.replaceCharacters(in: match.range, with: "\n")
+                }
+            }
+            return separatedClause as String
+        }.joined(separator: "\n")
         return wordBreak.stringByReplacingMatches(
             in: separated, range: NSRange(separated.startIndex..., in: separated), withTemplate: " "
         ).trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func beginsIndependentClause(_ text: String, after context: String) -> Bool {
+        let current = normalize(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentRange = NSRange(current.startIndex..., in: current)
+        let lowercase = text.lowercased()
+        guard continuationStart.firstMatch(in: lowercase, range: NSRange(lowercase.startIndex..., in: lowercase)) == nil,
+              independentStart.firstMatch(in: current, range: currentRange) != nil ||
+              playbook.contains(where: { $0.phrase.firstMatch(in: current, range: currentRange) != nil }) else { return false }
+        let previous = String(normalize(context).components(separatedBy: "\n").last ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        let previousRange = NSRange(previous.startIndex..., in: previous)
+        if imperativeClauseStart.firstMatch(in: current, range: currentRange) != nil,
+           negatedImperative.firstMatch(in: previous, range: previousRange) != nil { return false }
+        return playbook.contains { rule in
+            guard let match = rule.phrase.matches(in: previous, range: previousRange).last else { return false }
+            let suffix = (previous as NSString).substring(from: NSMaxRange(match.range))
+            return completedSuffix.firstMatch(in: suffix, range: NSRange(suffix.startIndex..., in: suffix)) != nil
+        }
     }
 
     private static func matches(_ rule: Rule, in text: String, startingAt start: Int = 0, crossing boundary: Int? = nil) -> Bool {
