@@ -133,6 +133,94 @@ final class LiveSessionControllerTests: XCTestCase {
 
     // MARK: - Tests
 
+    func testObjectionCoachingUsesFinalizedRemoteSpeechInBothAssistantModes() async throws {
+        for mode in [SidebarMode.classicSuggestions, .sidecast] {
+            let dirs = makeTempDirs()
+            defer { try? FileManager.default.removeItem(at: dirs.root) }
+            let settings = makeSettings(notesDirectory: dirs.notes)
+            settings.sidebarMode = mode
+            settings.enableLiveTranscriptCleanup = false
+            let (controller, coordinator) = makeController(
+                root: dirs.root, notesDirectory: dirs.notes, settings: settings
+            )
+            controller.startSession(settings: settings)
+            for _ in 0..<100 {
+                if coordinator.transcriptionEngine?.isRunning == true { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertTrue(coordinator.transcriptionEngine?.isRunning == true)
+
+            coordinator.transcriptStore.volatileThemText = "That is too expensive"
+            coordinator.transcriptStore.append(Utterance(text: "That is too expensive", speaker: .you))
+            coordinator.transcriptStore.append(Utterance(text: "It is not too expensive", speaker: .them))
+            controller.syncProjectedState(settings: settings)
+            XCTAssertTrue(controller.state.objectionCards.isEmpty)
+
+            let remote = Utterance(text: "That is too expensive!", speaker: .them)
+            coordinator.transcriptStore.append(remote)
+            controller.syncProjectedState(settings: settings)
+            let first = try XCTUnwrap(controller.state.objectionCards.first)
+            XCTAssertEqual(first.quote, remote.text)
+
+            let repeated = Utterance(text: "We don’t have the budget!", speaker: .remote(2))
+            coordinator.transcriptStore.append(repeated)
+            controller.syncProjectedState(settings: settings)
+            XCTAssertEqual(controller.state.objectionCards.count, 1)
+            XCTAssertEqual(controller.state.objectionCards.first?.id, first.id)
+            XCTAssertEqual(controller.state.objectionCards.first?.quote, repeated.text)
+
+            controller.dismissObjectionCard(first.id)
+            controller.syncProjectedState(settings: settings)
+            XCTAssertTrue(controller.state.objectionCards.isEmpty, "Polling must not restore a dismissed card")
+
+            coordinator.transcriptStore.append(Utterance(text: "We cannot afford this", speaker: .remote(4)))
+            controller.syncProjectedState(settings: settings)
+            let resurfaced = try XCTUnwrap(controller.state.objectionCards.first)
+            XCTAssertNotEqual(resurfaced.id, first.id)
+            XCTAssertEqual(resurfaced.quote, "We cannot afford this")
+            controller.discardSession()
+            XCTAssertTrue(controller.state.objectionCards.isEmpty)
+        }
+    }
+
+    func testNewSessionResetsCardIdentityAndIngestionEvenWithSameTranscriptCount() async throws {
+        let dirs = makeTempDirs()
+        defer { try? FileManager.default.removeItem(at: dirs.root) }
+        let settings = makeSettings(notesDirectory: dirs.notes)
+        settings.enableLiveTranscriptCleanup = false
+        let (controller, coordinator) = makeController(
+            root: dirs.root, notesDirectory: dirs.notes, settings: settings,
+            scripted: [Utterance(text: "That is too expensive", speaker: .remote(1))]
+        )
+        controller.startSession(settings: settings)
+        for _ in 0..<100 {
+            if coordinator.transcriptionEngine?.isRunning == true { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.syncProjectedState(settings: settings)
+        let first = try XCTUnwrap(controller.state.objectionCards.first)
+        controller.dismissObjectionCard(first.id)
+        controller.stopSession(settings: settings)
+        for _ in 0..<100 {
+            if case .idle = coordinator.state { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(coordinator.lastEndedSession?.utteranceCount, 1)
+        controller.syncProjectedState(settings: settings)
+        controller.startSession(settings: settings)
+        for _ in 0..<100 {
+            if coordinator.transcriptionEngine?.isRunning == true { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.syncProjectedState(settings: settings)
+        let next = try XCTUnwrap(controller.state.objectionCards.first)
+        XCTAssertNotEqual(next.id, first.id)
+        XCTAssertEqual(next.quote, first.quote)
+        XCTAssertEqual(controller.state.liveTranscript.count, 1)
+        controller.discardSession()
+    }
+
     func testStartSessionTransitionsStateToRecordingSynchronously() {
         let dirs = makeTempDirs()
         let settings = makeSettings(notesDirectory: dirs.notes)

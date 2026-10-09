@@ -170,11 +170,11 @@ final class AppContainer {
                 transcriptStore: coordinator.transcriptStore,
                 settings: settings
             )
-        case .uiTest:
+        case .uiTest(let scenario):
             transcriptionEngine = TranscriptionEngine(
                 transcriptStore: coordinator.transcriptStore,
                 settings: settings,
-                mode: .scripted(Self.scriptedUtterances)
+                mode: .scripted(scenario == .objectionSmoke ? Self.scriptedObjections : Self.scriptedUtterances)
             )
         }
 
@@ -367,6 +367,14 @@ final class AppContainer {
             ?? .launchSmoke
         return .uiTest(scenario)
     }
+
+    private static let scriptedObjections: [Utterance] = [
+        Utterance(text: "The prospect said: That is too expensive.", speaker: .you),
+        Utterance(text: "Can you tell me the price?", speaker: .them),
+        Utterance(text: "It is not too expensive.", speaker: .remote(1)),
+        Utterance(text: "That is too expensive!", speaker: .them),
+        Utterance(text: "We don’t have the budget!", speaker: .remote(2)),
+    ]
 
     private static let scriptedUtterances: [Utterance] = [
         Utterance(

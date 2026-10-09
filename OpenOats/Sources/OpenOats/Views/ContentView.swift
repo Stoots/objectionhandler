@@ -131,6 +131,54 @@ struct ContentView: View {
             }
 
             if controllerState.isRunning {
+                liveWorkspace(controllerState)
+            } else {
+                HomeTimelineWorkspaceView(settings: settings)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+
+            if controllerState.isRunning {
+                Spacer(minLength: 0)
+            }
+
+            Divider()
+
+            // Bottom bar: live indicator + model
+            IsolatedControlBarWrapper(
+                state: controllerState,
+                onToggle: {
+                    pendingControlBarAction = .toggle
+                },
+                onMuteToggle: {
+                    liveSessionController?.toggleMicMute()
+                },
+                onPauseToggle: {
+                    liveSessionController?.toggleRecordingPause()
+                },
+                onConfirmDownload: {
+                    pendingControlBarAction = .confirmDownload
+                },
+                onOpenSettings: {
+                    openSettingsWindow()
+                },
+                onOpenMicrophonePrivacySettings: {
+                    openMicrophonePrivacySettings()
+                }
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func liveWorkspace(_ controllerState: LiveSessionState) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ObjectionCardsSection(
+                    cards: controllerState.objectionCards,
+                    isRecordingPaused: controllerState.isRecordingPaused,
+                    onDismiss: { liveSessionController?.dismissObjectionCard($0) }
+                )
+                Divider()
+
                 // Collapsible transcript (hidden when live transcript is disabled)
                 if controllerState.showLiveTranscript {
                     DisclosureGroup(isExpanded: $isTranscriptExpanded) {
@@ -205,41 +253,8 @@ struct ContentView: View {
                         handleScratchpadAssetPaste(providers)
                     }
                 )
-            } else {
-                HomeTimelineWorkspaceView(settings: settings)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-
-            if controllerState.isRunning {
-                Spacer(minLength: 0)
-            }
-
-            Divider()
-
-            // Bottom bar: live indicator + model
-            IsolatedControlBarWrapper(
-                state: controllerState,
-                onToggle: {
-                    pendingControlBarAction = .toggle
-                },
-                onMuteToggle: {
-                    liveSessionController?.toggleMicMute()
-                },
-                onPauseToggle: {
-                    liveSessionController?.toggleRecordingPause()
-                },
-                onConfirmDownload: {
-                    pendingControlBarAction = .confirmDownload
-                },
-                onOpenSettings: {
-                    openSettingsWindow()
-                },
-                onOpenMicrophonePrivacySettings: {
-                    openMicrophonePrivacySettings()
-                }
-            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var bodyWithModifiers: some View {

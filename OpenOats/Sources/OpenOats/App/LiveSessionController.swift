@@ -29,6 +29,7 @@ final class LiveSessionState {
     var volatileYouText: String = ""
     var volatileThemText: String = ""
     var suggestions: [Suggestion] = []
+    var objectionCards: [ObjectionCard] = []
     var isGeneratingSuggestions: Bool = false
     var batchStatus: BatchAudioTranscriber.Status = .idle
     var batchIsImporting: Bool = false
@@ -180,6 +181,7 @@ final class LiveSessionController {
     private let coordinator: AppCoordinator
     private let container: AppContainer
 
+    private var objectionCoaching = ObjectionCoaching()
     private var downloadTask: Task<Void, Never>?
     private var startPreflightTask: Task<Void, Never>?
     /// True while a cloud-model preflight is validating a manual start.
@@ -408,6 +410,11 @@ final class LiveSessionController {
         }
     }
 
+    func dismissObjectionCard(_ id: UUID) {
+        objectionCoaching.dismiss(id)
+        set(\.objectionCards, objectionCoaching.cards)
+    }
+
     func toggleMicMute() {
         guard let engine = coordinator.transcriptionEngine, engine.isRunning else { return }
         engine.isMicMuted.toggle()
@@ -550,6 +557,10 @@ final class LiveSessionController {
 
     private func handleNewUtterance(_ last: Utterance, settings: AppSettings) {
         container.detectionController?.noteUtterance()
+        if _currentSessionID != nil {
+            objectionCoaching.consumeFinalized(last)
+            set(\.objectionCards, objectionCoaching.cards)
+        }
 
         if settings.enableLiveTranscriptCleanup, let engine = coordinator.liveTranscriptCleaner {
             Task {
@@ -659,6 +670,9 @@ final class LiveSessionController {
         coordinator.pendingRecoverySessionID = nil
         coordinator.lastStorageError = nil
         coordinator.transcriptStore.clear()
+        observedUtteranceCount = 0
+        objectionCoaching.reset()
+        set(\.objectionCards, [])
 
         await coordinator.sessionRepository.setWriteErrorHandler { [weak coordinator] message in
             Task { @MainActor [weak coordinator] in
@@ -1583,6 +1597,9 @@ final class LiveSessionController {
         coordinator.transcriptionEngine?.stop()
         coordinator.audioRecorder?.discardRecording()
         coordinator.transcriptStore.clear()
+        observedUtteranceCount = 0
+        objectionCoaching.reset()
+        set(\.objectionCards, [])
         coordinator.pendingRecoverySessionID = nil
         if let sessionID = _currentSessionID {
             DiagnosticsSupport.record(category: "meeting", message: "Discarded session \(sessionID)")

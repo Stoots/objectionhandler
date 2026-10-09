@@ -33,6 +33,7 @@ If you're looking for a hosted desktop recording API, consider checking out [Rec
 - **Live transcript** — see both sides of the conversation as it happens, copy the whole thing with one click
 - **Auto-saved sessions** — every conversation is automatically saved as a plain-text transcript and a structured session log, no manual export needed
 - **Knowledge base search** — point it at a folder of notes and it pulls in what's relevant using [Voyage AI](https://www.voyageai.com/) embeddings, local Ollama embeddings, or any OpenAI-compatible endpoint (llama.cpp, llamaswap, LiteLLM, vLLM, etc.)
+- **Local objection coaching** — finalized remote price/budget objections show the exact quote, a suggested reply, and a follow-up question without an LLM or knowledge base
 
 ## How it works
 
@@ -82,14 +83,71 @@ Or build from source:
 
 1. Open the DMG and drag OpenOats to Applications
 2. Launch the app and grant microphone + system audio recording permissions
-3. Open Settings (`Cmd+,`) and pick your providers:
+3. For **Suggestions / Sidecast**, optionally open Settings (`Cmd+,`) and pick your providers:
    - **Cloud**: add your OpenRouter and Voyage AI API keys
    - **Local**: select Ollama as your LLM and embedding provider (make sure Ollama is running)
    - **OpenAI-compatible**: select "OpenAI Compatible" as your embedding provider and point it at any `/v1/embeddings` endpoint
-4. Point it at a folder of `.md` or `.txt` files — that's your knowledge base
+4. For knowledge-backed suggestions, point it at a folder of `.md` or `.txt` files
 5. Click **Idle** to go live
 
 The first run downloads the local speech model (~600 MB).
+
+### Local price/budget coaching
+
+Start a session with the usual recording consent and audio permissions. The
+**Objection coaching** section in the existing main window waits for finalized
+remote/system-audio speech, including diarized remote participants. Microphone
+speech and partial transcript hypotheses do not trigger cards. No LLM API key
+or knowledge-base setup is needed; the selected transcription model still
+needs its normal setup/download. Suggestions and Sidecast remain independent.
+
+Examples include “That is too expensive,” “We don't have the budget,”
+“We can't afford it,” and “This is outside our budget.” A card shows the
+prospect's exact raw transcript quote, a product-neutral suggested spoken
+reply, and a follow-up question. Read these as prompts, not verified claims
+about your product. Coaching adds no network requests; any configured cloud
+transcription or assistant features retain their existing network behavior.
+
+Repeated price/budget objections update the active category card and retain
+its identity. Use the card's **×** button to dismiss it. Polling does not bring
+a dismissed card back, but a new finalized objection can. Starting a new
+session or discarding the current one clears coaching/detection state.
+The live-content column scrolls in smaller windows while call controls stay
+visible. Waiting text changes while recording is paused. Cards do not open
+modal popups or request keyboard focus.
+
+This is **local English phrase matching, not a semantic classifier**. It
+normalizes case, straight/curly apostrophes, contractions, and punctuation,
+rejects incidental price/budget mentions, and checks simple clause-level
+negations such as “It is not too expensive.” Unlisted paraphrases, indirect
+objections, sarcasm, complex negation, remote quotations/hypotheticals, other
+languages, and transcription or speaker-attribution errors can cause misses
+or false positives. Only price/budget coaching is supported.
+
+For isolated scripted verification (no audio is captured):
+
+```sh
+swift build --package-path OpenOats --product OpenOats
+OPENOATS_UI_TEST=1 OPENOATS_UI_SCENARIO=objectionSmoke \
+OPENOATS_UI_TEST_RUN_ID="$(uuidgen)" ./OpenOats/.build/debug/OpenOats
+```
+
+Start the session to replay microphone, incidental/negated remote, price, and
+repeated remote-budget inputs through the existing transcription/session path.
+Expect one card quoting “We don’t have the budget!”; dismiss, stop, and start
+again to check reset. This uses ephemeral credentials/settings and temporary
+session files, not your normal workspace. Regression coverage:
+
+```sh
+swift test --package-path OpenOats --filter 'ObjectionCoachingTests|LiveSessionControllerTests'
+./scripts/run_ui_smoke.sh
+```
+
+The native UI suite requires macOS UI-testing automation authorization.
+Scripted input does **not** verify microphone capture, a Core Audio tap, speech
+recognition accuracy, or a live call. Use the separate
+[real-device audio check](docs/macos-compatibility.md#audio-regressions-covered)
+with known price/budget speech to verify those.
 
 ## What you need
 

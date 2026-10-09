@@ -3,6 +3,7 @@ import Foundation
 enum UITestScenario: String {
     case launchSmoke
     case sessionSmoke
+    case objectionSmoke
     case notesSmoke
     case wizardSmoke
 }

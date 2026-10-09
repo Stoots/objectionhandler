@@ -38,6 +38,33 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(element(in: app, identifier: "wizard.root").waitForExistence(timeout: 5))
     }
 
+    func testObjectionCardDismissalAndNewSessionReset() {
+        let app = launchApp(scenario: "objectionSmoke")
+        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+
+        let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
+        XCTAssertTrue(quote.waitForExistence(timeout: 10))
+        XCTAssertTrue(quote.isHittable, "The card must be visible, not just present in accessibility")
+        XCTAssertEqual(quote.label, "We don’t have the budget!")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.priceBudget").count, 1)
+        XCTAssertEqual(app.sheets.count, 0)
+        let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
+        screenshot.name = "Scripted price card in native workspace"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        element(in: app, identifier: "app.objections.dismiss.priceBudget").click()
+        XCTAssertTrue(element(in: app, identifier: "app.objections.waiting").waitForExistence(timeout: 5))
+        XCTAssertFalse(quote.exists)
+
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 15))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        XCTAssertTrue(quote.waitForExistence(timeout: 10))
+        XCTAssertEqual(quote.label, "We don’t have the budget!")
+    }
+
     func testSessionSmokeShowsEndedBanner() {
         let app = launchApp(scenario: "sessionSmoke")
 
