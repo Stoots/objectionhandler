@@ -46,7 +46,7 @@ final class SmokeTests: XCTestCase {
         let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
         XCTAssertTrue(quote.isHittable, "The card must be visible, not just present in accessibility")
-        XCTAssertEqual(quote.label, "We don’t have the budget!")
+        XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.priceBudget").count, 1)
         XCTAssertEqual(app.sheets.count, 0)
         let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
@@ -59,10 +59,10 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(quote.exists)
 
         app.typeKey("l", modifierFlags: [.command, .shift])
-        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 15))
+        XCTAssertTrue(element(in: app, identifier: "app.sessionEndedBanner").waitForExistence(timeout: 15))
         app.typeKey("l", modifierFlags: [.command, .shift])
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
-        XCTAssertEqual(quote.label, "We don’t have the budget!")
+        XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
     }
 
     func testSessionSmokeShowsEndedBanner() {

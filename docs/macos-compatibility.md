@@ -64,6 +64,25 @@ built-in speakers: a microphone-muted test finalized “The quick brown fox jump
 over the lazy dog.” and saved a 48 kHz mono AAC recording. This is a short
 capture/transcription check, not a long-meeting or all-peripherals certification.
 
+### Objection coaching capture verification
+
+On macOS 26.6.2 / Apple M3, Parakeet TDT v2 finalized a synthesized
+price/budget phrase from external playback as **Them**, with the microphone
+muted. The native window displayed the matching objection card, suggested
+reply, and follow-up question. A separate physical-microphone check finalized
+the phrase as **You** and left coaching in its waiting state. That check used
+an `AVAudioPlayer` created through the debugger inside the isolated app:
+the existing system tap excludes the app's own playback, so the phrase
+reached transcription through the microphone rather than the system channel.
+
+Selecting the unused Microsoft Teams output did not isolate external playback
+on this machine; it still arrived as **Them**. Do not treat that setup as a
+microphone-only check. These are controlled-audio checks, not a human sales
+call, transcription-accuracy certification, or multi-speaker hardware test.
+The XCTest UI suite uses scripted transcripts and is separate from audio
+capture verification. Run those checks sequentially with only one test app
+open: both app instances register the global recording shortcut.
+
 For diagnosis, enable Settings → General → Diagnostic logging and inspect the
 system-audio events or export diagnostics. Successful startup should report a
 nonzero tap ID, a resolved tap format and a successful device start. An absent
