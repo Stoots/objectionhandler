@@ -18,8 +18,9 @@ enum OpenOatsWindowSizing {
     static let liveWorkspaceTwoColumnWidth: CGFloat = 880
     static let liveWorkspaceContextPaneWidth: CGFloat = 340
     /// Bounded height of the objection board at compact widths, sized to show one
-    /// complete stacked card while the rest scroll inside the board.
-    static let compactObjectionBoardHeight: CGFloat = 216
+    /// complete stacked card — through its Copy control — while further cards
+    /// scroll inside the board.
+    static let compactObjectionBoardHeight: CGFloat = 252
 }
 
 public struct OpenOatsRootApp: App {
@@ -444,23 +445,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         registerGlobalHotkey()
 
-        if isUITest, ProcessInfo.processInfo.environment["OPENOATS_UI_WINDOW_SIZE"] != nil {
+        if isUITest {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.applyUITestWindowSizeOverride()
+                self?.applyUITestWindowSize()
             }
         }
     }
 
-    /// Deterministic window sizing for UI tests, so layout evidence can be
-    /// captured at compact and wide widths without depending on the window server.
-    private func applyUITestWindowSizeOverride() {
-        guard let spec = ProcessInfo.processInfo.environment["OPENOATS_UI_WINDOW_SIZE"] else { return }
-        let parts = spec.lowercased().split(separator: "x")
-        guard parts.count == 2,
-              let width = Double(parts[0]),
-              let height = Double(parts[1]) else { return }
+    /// Deterministic window sizing for UI tests, so layout evidence is captured
+    /// at a known width and one test's size never leaks into the next. Always
+    /// applies the collapsed minimum unless `OPENOATS_UI_WINDOW_SIZE=WxH`
+    /// overrides it, because SwiftUI persists the window frame between launches
+    /// and would otherwise carry a wider size forward.
+    private func applyUITestWindowSize() {
+        var size = OpenOatsWindowSizing.mainWindowCollapsedMinSize
+        if let spec = ProcessInfo.processInfo.environment["OPENOATS_UI_WINDOW_SIZE"] {
+            let parts = spec.lowercased().split(separator: "x")
+            if parts.count == 2, let width = Double(parts[0]), let height = Double(parts[1]) {
+                size = NSSize(width: width, height: height)
+            }
+        }
         for window in NSApp.windows where window.identifier?.rawValue == OpenOatsRootApp.mainWindowID {
-            window.setContentSize(NSSize(width: width, height: height))
+            window.setContentSize(size)
         }
     }
 

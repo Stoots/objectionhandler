@@ -10,6 +10,9 @@ struct ObjectionCardsSection: View {
     let cards: [ObjectionCard]
     let isRecordingPaused: Bool
     let hasDismissed: Bool
+    /// In the wide two-pane layout the suggested reply and follow-up question sit
+    /// side by side, per the approved design.
+    let isWideLayout: Bool
     let onCopy: (ObjectionCard) -> Void
     let onDismiss: (UUID) -> Void
 
@@ -133,11 +136,12 @@ struct ObjectionCardsSection: View {
     }
 
     private func newObjectionsBanner(count: Int, onJump: @escaping () -> Void) -> some View {
-        Button(action: onJump) {
+        let label = count == 1 ? "1 new objection" : "\(count) new objections"
+        return Button(action: onJump) {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 10))
-                Text(count == 1 ? "1 new objection" : "\(count) new objections")
+                Text(label)
                     .font(.system(size: 11, weight: .medium))
             }
             .padding(.horizontal, 8)
@@ -148,7 +152,7 @@ struct ObjectionCardsSection: View {
         .background(Color.accentColor.opacity(0.12))
         .clipShape(Capsule())
         .accessibilityIdentifier("app.objections.newCount")
-        .accessibilityLabel(count == 1 ? "1 new objection" : "\(count) new objections")
+        .accessibilityLabel(label)
     }
 
     // MARK: - Card
@@ -179,24 +183,14 @@ struct ObjectionCardsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("app.objections.quote.\(card.category.rawValue)")
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Suggested reply")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(card.suggestedReply)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("app.objections.reply.\(card.category.rawValue)")
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Follow-up question")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(card.followUpQuestion)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("app.objections.followUp.\(card.category.rawValue)")
+            if isWideLayout {
+                HStack(alignment: .top, spacing: 12) {
+                    replyBlock(card)
+                    followUpBlock(card)
+                }
+            } else {
+                replyBlock(card)
+                followUpBlock(card)
             }
 
             HStack(spacing: 8) {
@@ -236,6 +230,32 @@ struct ObjectionCardsSection: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .contain)
+    }
+
+    private func replyBlock(_ card: ObjectionCard) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Suggested reply")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(card.suggestedReply)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("app.objections.reply.\(card.category.rawValue)")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func followUpBlock(_ card: ObjectionCard) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Follow-up question")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(card.followUpQuestion)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("app.objections.followUp.\(card.category.rawValue)")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Actions

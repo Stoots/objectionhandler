@@ -46,6 +46,7 @@ final class SmokeTests: XCTestCase {
         let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
         XCTAssertTrue(quote.isHittable, "The card must be visible, not just present in accessibility")
+        XCTAssertEqual(app.windows["main"].frame.width, 520, accuracy: 3, "The compact workspace must be exercised at the 520 px minimum width")
         XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.priceBudget").count, 1)
         XCTAssertEqual(app.sheets.count, 0)
@@ -79,6 +80,7 @@ final class SmokeTests: XCTestCase {
 
         let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(app.windows["main"].frame.width, 880, "The wide two-pane layout must be exercised")
         XCTAssertTrue(quote.isHittable, "The card must remain visible in the wide two-pane layout")
 
         let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())

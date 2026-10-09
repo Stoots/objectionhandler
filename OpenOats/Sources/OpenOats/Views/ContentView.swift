@@ -211,6 +211,7 @@ struct ContentView: View {
             cards: controllerState.objectionCards,
             isRecordingPaused: controllerState.isRecordingPaused,
             hasDismissed: controllerState.hasDismissedObjectionCard,
+            isWideLayout: expanded,
             onCopy: { copyObjectionCard($0) },
             onDismiss: { liveSessionController?.dismissObjectionCard($0) }
         )

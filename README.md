@@ -167,6 +167,12 @@ card's Dismiss button, then the previous card's, then the section heading. Light
 and dark appearances follow the system, and Reduce Motion removes card insertion
 and removal animation. Waiting text changes while recording is paused.
 
+The scripted smoke scenarios exercise the board states, Copy/Dismiss, and the
+compact and wide layouts, but they neither capture audio nor assert appearance:
+dark/light rendering and Reduce Motion rely on macOS semantic colors and the
+existing system typography, and were checked against the approved design
+exports rather than by an automated appearance test.
+
 This is **local English phrase matching, not a semantic classifier**. It
 normalizes case, straight/curly apostrophes, contractions, and punctuation,
 rejects incidental keywords such as “email,” “budget,” and “provider,” and
