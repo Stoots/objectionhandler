@@ -30,6 +30,9 @@ final class LiveSessionState {
     var volatileThemText: String = ""
     var suggestions: [Suggestion] = []
     var objectionCards: [ObjectionCard] = []
+    /// True once the user has dismissed a card this session, so the empty board
+    /// can show its dismissed state instead of the waiting state.
+    var hasDismissedObjectionCard: Bool = false
     var isGeneratingSuggestions: Bool = false
     var batchStatus: BatchAudioTranscriber.Status = .idle
     var batchIsImporting: Bool = false
@@ -413,6 +416,7 @@ final class LiveSessionController {
     func dismissObjectionCard(_ id: UUID) {
         objectionCoaching.dismiss(id)
         set(\.objectionCards, objectionCoaching.cards)
+        set(\.hasDismissedObjectionCard, true)
     }
 
     func toggleMicMute() {
@@ -673,6 +677,7 @@ final class LiveSessionController {
         observedUtteranceCount = 0
         objectionCoaching.reset()
         set(\.objectionCards, [])
+        set(\.hasDismissedObjectionCard, false)
 
         await coordinator.sessionRepository.setWriteErrorHandler { [weak coordinator] message in
             Task { @MainActor [weak coordinator] in
@@ -1600,6 +1605,7 @@ final class LiveSessionController {
         observedUtteranceCount = 0
         objectionCoaching.reset()
         set(\.objectionCards, [])
+        set(\.hasDismissedObjectionCard, false)
         coordinator.pendingRecoverySessionID = nil
         if let sessionID = _currentSessionID {
             DiagnosticsSupport.record(category: "meeting", message: "Discarded session \(sessionID)")

@@ -144,9 +144,34 @@ playbook requests such as “email me”; commas in a shared negated list retain
 that negation scope.
 Explicit “do not” imperative lists keep their negation across supported
 requests, commas, and list conjunctions, including split chunks.
-The live-content column scrolls in smaller windows while call controls stay
-visible. Waiting text changes while recording is paused. Cards do not open
-modal popups or request keyboard focus.
+The live-call workspace has two widths. At the 520 px minimum and up to 879 px
+it is a single column: the objection board sits above a scrollable Transcript
+and My Notes, and the recording controls stay pinned below. At 880 px and wider
+it matches the approved sales-call proposal, with Transcript and My Notes in a
+340 px left pane and the objection board in the majority-width right pane, so
+three complete cards are visible at 1080×720. The board scrolls on its own, and
+a count appears when you have scrolled away from the newest card.
+
+Each card shows its category/title, the prospect's exact quote, the suggested
+reply, and the follow-up question. **Copy** places the suggested reply and
+follow-up question on the clipboard — never the prospect's exact words — and
+briefly shows **Copied** without moving focus. The **×** button dismisses that
+card by its stable identity and leaves the transcript untouched; when no cards
+remain the board shows a quiet dismissed state and keeps listening.
+
+Cards are non-modal and never steal keyboard focus on insertion. Every control
+is keyboard reachable (Tab/Shift-Tab to move, Space/Return to activate) with a
+visible accent focus ring and a descriptive accessibility label, and quote and
+reply text are selectable. After a keyboard dismissal focus moves to the next
+card's Dismiss button, then the previous card's, then the section heading. Light
+and dark appearances follow the system, and Reduce Motion removes card insertion
+and removal animation. Waiting text changes while recording is paused.
+
+The scripted smoke scenarios exercise the board states, Copy/Dismiss, and the
+compact and wide layouts, but they neither capture audio nor assert appearance:
+dark/light rendering and Reduce Motion rely on macOS semantic colors and the
+existing system typography, and were checked against the approved design
+exports rather than by an automated appearance test.
 
 This is **local English phrase matching, not a semantic classifier**. It
 normalizes case, straight/curly apostrophes, contractions, and punctuation,

@@ -169,92 +169,141 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+    /// The live-call workspace. At compact widths the objection board sits above
+    /// a scrollable transcript and scratchpad, so nothing is clipped at the
+    /// 520 px minimum. At 880 px and above, Transcript and My Notes occupy a
+    /// 340 px left pane and the objection board takes the majority-width right
+    /// pane, matching the approved design.
     private func liveWorkspace(_ controllerState: LiveSessionState) -> some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ObjectionCardsSection(
-                    cards: controllerState.objectionCards,
-                    isRecordingPaused: controllerState.isRecordingPaused,
-                    onDismiss: { liveSessionController?.dismissObjectionCard($0) }
-                )
-                Divider()
-
-                // Collapsible transcript (hidden when live transcript is disabled)
-                if controllerState.showLiveTranscript {
-                    DisclosureGroup(isExpanded: $isTranscriptExpanded) {
-                        IsolatedTranscriptWrapper(state: controllerState)
-                            .frame(height: 150)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Transcript")
-                                .font(.system(size: 12, weight: .medium))
-                            if !controllerState.liveTranscript.isEmpty {
-                                Text("(\(controllerState.liveTranscript.count))")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            if let liveTranscriptNotice = controllerState.liveTranscriptNotice {
-                                Text("·")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                                Text(liveTranscriptNotice)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                            }
-                            if controllerState.recordingElapsedSeconds > 0 {
-                                Text("·")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                                Text(ElapsedTimeFormatter.compactMinutesSeconds(controllerState.recordingElapsedSeconds))
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            if isTranscriptExpanded && !controllerState.liveTranscript.isEmpty {
-                                Button {
-                                    openWindow(id: "transcript")
-                                } label: {
-                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                        .padding(4)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Open transcript in separate window")
-
-                                Button {
-                                    copyTranscript()
-                                } label: {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                        .padding(4)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Copy transcript")
-                            }
+        GeometryReader { proxy in
+            let isWide = proxy.size.width >= OpenOatsWindowSizing.liveWorkspaceTwoColumnWidth
+            Group {
+                if isWide {
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            transcriptSection(controllerState, expanded: true)
+                            Divider()
+                            scratchpadSectionView(controllerState)
+                        }
+                        .frame(width: OpenOatsWindowSizing.liveWorkspaceContextPaneWidth)
+                        Divider()
+                        objectionBoardView(controllerState, expanded: true)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            objectionBoardView(controllerState, expanded: false)
+                            Divider()
+                            transcriptSection(controllerState, expanded: false)
+                            Divider()
+                            scratchpadSectionView(controllerState)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
                 }
-
-                Divider()
-                ScratchpadSection(
-                    text: Binding(
-                        get: { controllerState.scratchpadText },
-                        set: { liveSessionController?.updateScratchpad($0) }
-                    ),
-                    onPasteAssetProviders: { providers in
-                        handleScratchpadAssetPaste(providers)
-                    }
-                )
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+    }
+
+    @ViewBuilder
+    private func objectionBoardView(_ controllerState: LiveSessionState, expanded: Bool) -> some View {
+        let board = ObjectionCardsSection(
+            cards: controllerState.objectionCards,
+            isRecordingPaused: controllerState.isRecordingPaused,
+            hasDismissed: controllerState.hasDismissedObjectionCard,
+            isWideLayout: expanded,
+            onCopy: { copyObjectionCard($0) },
+            onDismiss: { liveSessionController?.dismissObjectionCard($0) }
+        )
+        if expanded {
+            board.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            board
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: OpenOatsWindowSizing.compactObjectionBoardHeight)
+        }
+    }
+
+    @ViewBuilder
+    private func transcriptSection(_ controllerState: LiveSessionState, expanded: Bool) -> some View {
+        // Collapsible transcript (hidden when live transcript is disabled)
+        if controllerState.showLiveTranscript {
+            DisclosureGroup(isExpanded: $isTranscriptExpanded) {
+                IsolatedTranscriptWrapper(state: controllerState)
+                    .frame(
+                        minHeight: expanded ? 90 : 150,
+                        maxHeight: expanded ? .infinity : 150
+                    )
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Transcript")
+                        .font(.system(size: 12, weight: .medium))
+                    if !controllerState.liveTranscript.isEmpty {
+                        Text("(\(controllerState.liveTranscript.count))")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    if let liveTranscriptNotice = controllerState.liveTranscriptNotice {
+                        Text("·")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(liveTranscriptNotice)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    if controllerState.recordingElapsedSeconds > 0 {
+                        Text("·")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(ElapsedTimeFormatter.compactMinutesSeconds(controllerState.recordingElapsedSeconds))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    if isTranscriptExpanded && !controllerState.liveTranscript.isEmpty {
+                        Button {
+                            openWindow(id: "transcript")
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .padding(4)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open transcript in separate window")
+
+                        Button {
+                            copyTranscript()
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .padding(4)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy transcript")
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func scratchpadSectionView(_ controllerState: LiveSessionState) -> some View {
+        ScratchpadSection(
+            text: Binding(
+                get: { controllerState.scratchpadText },
+                set: { liveSessionController?.updateScratchpad($0) }
+            ),
+            onPasteAssetProviders: { providers in
+                handleScratchpadAssetPaste(providers)
+            }
+        )
     }
 
     private var bodyWithModifiers: some View {
@@ -266,8 +315,8 @@ struct ContentView: View {
 
         return rootContent
             .frame(
-                minWidth: isRunning ? 360 : 460,
-                maxWidth: isRunning ? 600 : .infinity,
+                minWidth: isRunning ? OpenOatsWindowSizing.mainWindowCollapsedMinSize.width : 460,
+                maxWidth: .infinity,
                 minHeight: 400,
                 maxHeight: .infinity,
                 alignment: .topLeading
@@ -578,6 +627,13 @@ struct ContentView: View {
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    }
+
+    /// Copies the suggested reply and follow-up question for one objection card.
+    /// The prospect's exact words are deliberately excluded.
+    private func copyObjectionCard(_ card: ObjectionCard) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(card.clipboardText, forType: .string)
     }
 
     private func handleScratchpadAssetPaste(_ providers: [NSItemProvider]) {

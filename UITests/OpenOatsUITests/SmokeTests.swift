@@ -46,6 +46,7 @@ final class SmokeTests: XCTestCase {
         let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
         XCTAssertTrue(quote.isHittable, "The card must be visible, not just present in accessibility")
+        XCTAssertEqual(app.windows["main"].frame.width, 520, accuracy: 3, "The compact workspace must be exercised at the 520 px minimum width")
         XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "app.objections.quote.priceBudget").count, 1)
         XCTAssertEqual(app.sheets.count, 0)
@@ -63,6 +64,43 @@ final class SmokeTests: XCTestCase {
         app.typeKey("l", modifierFlags: [.command, .shift])
         XCTAssertTrue(quote.waitForExistence(timeout: 10))
         XCTAssertEqual(quote.value as? String, "We don’t have the budget!")
+    }
+
+    func testObjectionCardCopyClipboardAndWideTwoPaneLayout() {
+        let app = XCUIApplication()
+        app.launchEnvironment["OPENOATS_UI_TEST"] = "1"
+        app.launchEnvironment["OPENOATS_UI_SCENARIO"] = "objectionSmoke"
+        app.launchEnvironment["OPENOATS_UI_TEST_RUN_ID"] = UUID().uuidString
+        app.launchEnvironment["OPENOATS_UI_WINDOW_SIZE"] = "1080x720"
+        app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+
+        XCTAssertTrue(element(in: app, identifier: "app.controlBar.toggle").waitForExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: [.command, .shift])
+
+        let quote = element(in: app, identifier: "app.objections.quote.priceBudget")
+        XCTAssertTrue(quote.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(app.windows["main"].frame.width, 880, "The wide two-pane layout must be exercised")
+        XCTAssertTrue(quote.isHittable, "The card must remain visible in the wide two-pane layout")
+
+        let screenshot = XCTAttachment(screenshot: app.windows["main"].screenshot())
+        screenshot.name = "Wide two-pane workspace with price card (1080x720)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let replyText = element(in: app, identifier: "app.objections.reply.priceBudget").value as? String ?? ""
+        let followUpText = element(in: app, identifier: "app.objections.followUp.priceBudget").value as? String ?? ""
+        XCTAssertFalse(replyText.isEmpty)
+        XCTAssertFalse(followUpText.isEmpty)
+
+        NSPasteboard.general.clearContents()
+        element(in: app, identifier: "app.objections.copy.priceBudget").click()
+        XCTAssertTrue(element(in: app, identifier: "app.objections.copied.priceBudget").waitForExistence(timeout: 3))
+
+        let clipboard = NSPasteboard.general.string(forType: .string) ?? ""
+        XCTAssertTrue(clipboard.contains(replyText), "Copy must place the suggested reply on the clipboard")
+        XCTAssertTrue(clipboard.contains(followUpText), "Copy must place the follow-up question on the clipboard")
+        XCTAssertFalse(clipboard.contains("We don’t have the budget!"), "Copy must exclude the prospect quote")
     }
 
     func testPlaybookCardsSplitPhraseDuplicateDismissalPauseAndReset() {
