@@ -12,6 +12,14 @@ enum OpenOatsWindowSizing {
     static let mainWindowCollapsedMinSize = CGSize(width: 520, height: 560)
     static let mainWindowExpandedMinSize = CGSize(width: 1080, height: 560)
     static let notesWorkspaceMinSize = CGSize(width: 980, height: 560)
+    /// Live-call workspace. Above this width the objection board splits into the
+    /// approved two-pane layout: a fixed context pane holding Transcript and My
+    /// Notes, and a majority-width objection pane.
+    static let liveWorkspaceTwoColumnWidth: CGFloat = 880
+    static let liveWorkspaceContextPaneWidth: CGFloat = 340
+    /// Bounded height of the objection board at compact widths, sized to show one
+    /// complete stacked card while the rest scroll inside the board.
+    static let compactObjectionBoardHeight: CGFloat = 216
 }
 
 public struct OpenOatsRootApp: App {
@@ -435,6 +443,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         registerGlobalHotkey()
+
+        if isUITest, ProcessInfo.processInfo.environment["OPENOATS_UI_WINDOW_SIZE"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.applyUITestWindowSizeOverride()
+            }
+        }
+    }
+
+    /// Deterministic window sizing for UI tests, so layout evidence can be
+    /// captured at compact and wide widths without depending on the window server.
+    private func applyUITestWindowSizeOverride() {
+        guard let spec = ProcessInfo.processInfo.environment["OPENOATS_UI_WINDOW_SIZE"] else { return }
+        let parts = spec.lowercased().split(separator: "x")
+        guard parts.count == 2,
+              let width = Double(parts[0]),
+              let height = Double(parts[1]) else { return }
+        for window in NSApp.windows where window.identifier?.rawValue == OpenOatsRootApp.mainWindowID {
+            window.setContentSize(NSSize(width: width, height: height))
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
